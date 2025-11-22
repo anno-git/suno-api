@@ -102,7 +102,7 @@ class SunoApi {
     this.client.interceptors.request.use(config => {
       if (this.currentToken && !config.headers.Authorization)
         config.headers.Authorization = `Bearer ${this.currentToken}`;
-      const cookiesArray = Object.entries(this.cookies).map(([key, value]) => 
+      const cookiesArray = Object.entries(this.cookies).map(([key, value]) =>
         cookie.serialize(key, value as string)
       );
       config.headers.Cookie = cookiesArray.join('; ');
@@ -214,10 +214,10 @@ class SunoApi {
   /**
    * Clicks on a locator or XY vector. This method is made because of the difference between ghost-cursor-playwright and Playwright methods
    */
-  private async click(target: Locator|Page, position?: { x: number, y: number }): Promise<void> {
+  private async click(target: Locator | Page, position?: { x: number, y: number }): Promise<void> {
     if (this.ghostCursorEnabled) {
       let pos: any = isPage(target) ? { x: 0, y: 0 } : await target.boundingBox();
-      if (position) 
+      if (position)
         pos = {
           ...pos,
           x: pos.x + position.x,
@@ -282,7 +282,7 @@ class SunoApi {
     const lax: 'Lax' | 'Strict' | 'None' = 'Lax';
     cookies.push({
       name: '__session',
-      value: this.currentToken+'',
+      value: this.currentToken + '',
       domain: '.suno.com',
       path: '/',
       sameSite: lax
@@ -290,7 +290,7 @@ class SunoApi {
     for (const key in this.cookies) {
       cookies.push({
         name: key,
-        value: this.cookies[key]+'',
+        value: this.cookies[key] + '',
         domain: '.suno.com',
         path: '/',
         sameSite: lax
@@ -304,7 +304,7 @@ class SunoApi {
    * Checks for CAPTCHA verification and solves the CAPTCHA if needed
    * @returns {string|null} hCaptcha token. If no verification is required, returns null
    */
-  public async getCaptcha(): Promise<string|null> {
+  public async getCaptcha(): Promise<string | null> {
     if (!await this.captchaRequired())
       return null;
 
@@ -319,12 +319,12 @@ class SunoApi {
 
     if (this.ghostCursorEnabled)
       this.cursor = await createCursor(page);
-    
+
     logger.info('Triggering the CAPTCHA');
     try {
       await page.getByLabel('Close').click({ timeout: 2000 }); // close all popups
       // await this.click(page, { x: 318, y: 13 });
-    } catch(e) {}
+    } catch (e) { }
 
     const textarea = page.locator('.custom-textarea');
     await this.click(textarea);
@@ -358,14 +358,14 @@ class SunoApi {
               }
               captcha = await this.solver.coordinates(payload);
               break;
-            } catch(err: any) {
+            } catch (err: any) {
               logger.info(err.message);
               if (j != 2)
                 logger.info('Retrying...');
               else
                 throw err;
             }
-          } 
+          }
           if (drag) {
             const challengeBox = await challenge.boundingBox();
             if (challengeBox == null)
@@ -378,7 +378,7 @@ class SunoApi {
             }
             for (let i = 0; i < captcha.data.length; i += 2) {
               const data1 = captcha.data[i];
-              const data2 = captcha.data[i+1];
+              const data2 = captcha.data[i + 1];
               logger.info(JSON.stringify(data1) + JSON.stringify(data2));
               await page.mouse.move(challengeBox.x + +data1.x, challengeBox.y + +data1.y);
               await page.mouse.down();
@@ -400,7 +400,7 @@ class SunoApi {
               throw e;
           });
         }
-      } catch(e: any) {
+      } catch (e: any) {
         if (e.message.includes('been closed') // catch error when closing the browser
           || e.message == 'AbortError') // catch error when waitForRequests is aborted
           resolve();
@@ -421,7 +421,7 @@ class SunoApi {
           const request = route.request();
           this.currentToken = request.headers().authorization.split('Bearer ').pop();
           resolve(request.postDataJSON().token);
-        } catch(err) {
+        } catch (err) {
           reject(err);
         }
       });
@@ -449,7 +449,8 @@ class SunoApi {
     prompt: string,
     make_instrumental: boolean = false,
     model?: string,
-    wait_audio: boolean = false
+    wait_audio: boolean = false,
+    metadata?: any
   ): Promise<AudioInfo[]> {
     await this.keepAlive(false);
     const startTime = Date.now();
@@ -460,7 +461,12 @@ class SunoApi {
       undefined,
       make_instrumental,
       model,
-      wait_audio
+      wait_audio,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      metadata
     );
     const costTime = Date.now() - startTime;
     logger.info('Generate Response:\n' + JSON.stringify(audios, null, 2));
@@ -509,7 +515,8 @@ class SunoApi {
     make_instrumental: boolean = false,
     model?: string,
     wait_audio: boolean = false,
-    negative_tags?: string
+    negative_tags?: string,
+    metadata?: any
   ): Promise<AudioInfo[]> {
     const startTime = Date.now();
     const audios = await this.generateSongs(
@@ -520,7 +527,11 @@ class SunoApi {
       make_instrumental,
       model,
       wait_audio,
-      negative_tags
+      negative_tags,
+      undefined,
+      undefined,
+      undefined,
+      metadata
     );
     const costTime = Date.now() - startTime;
     logger.info(
@@ -555,7 +566,8 @@ class SunoApi {
     negative_tags?: string,
     task?: string,
     continue_clip_id?: string,
-    continue_at?: number
+    continue_at?: number,
+    metadata?: any
   ): Promise<AudioInfo[]> {
     await this.keepAlive();
     const payload: any = {
@@ -566,32 +578,46 @@ class SunoApi {
       continue_at: continue_at,
       continue_clip_id: continue_clip_id,
       task: task,
-      token: await this.getCaptcha()
+      token: await this.getCaptcha(),
+      metadata: metadata
     };
     if (isCustom) {
       payload.tags = tags;
       payload.title = title;
       payload.negative_tags = negative_tags;
-      payload.prompt = prompt;
+
+      if (metadata?.gpt_description_prompt) {
+        payload.gpt_description_prompt = metadata.gpt_description_prompt;
+        payload.prompt = "";
+        // Remove from metadata to avoid duplication if necessary, though Suno might ignore extra fields
+        // But we should probably clean it up from the metadata object attached to payload
+        if (payload.metadata) {
+          const { gpt_description_prompt, ...rest } = payload.metadata;
+          payload.metadata = rest;
+        }
+      } else {
+        payload.prompt = prompt;
+      }
     } else {
       payload.gpt_description_prompt = prompt;
     }
     logger.info(
       'generateSongs payload:\n' +
-        JSON.stringify(
-          {
-            prompt: prompt,
-            isCustom: isCustom,
-            tags: tags,
-            title: title,
-            make_instrumental: make_instrumental,
-            wait_audio: wait_audio,
-            negative_tags: negative_tags,
-            payload: payload
-          },
-          null,
-          2
-        )
+      JSON.stringify(
+        {
+          prompt: prompt,
+          isCustom: isCustom,
+          tags: tags,
+          title: title,
+          make_instrumental: make_instrumental,
+          wait_audio: wait_audio,
+          negative_tags: negative_tags,
+          metadata: metadata,
+          payload: payload
+        },
+        null,
+        2
+      )
     );
     const response = await this.client.post(
       `${SunoApi.BASE_URL}/api/generate/v2/`,
@@ -832,11 +858,11 @@ class SunoApi {
 
   public async getPersonaPaginated(personaId: string, page: number = 1): Promise<PersonaResponse> {
     await this.keepAlive(false);
-    
+
     const url = `${SunoApi.BASE_URL}/api/persona/get-persona-paginated/${personaId}/?page=${page}`;
-    
+
     logger.info(`Fetching persona data: ${url}`);
-    
+
     const response = await this.client.get(url, {
       timeout: 10000 // 10 seconds timeout
     });
